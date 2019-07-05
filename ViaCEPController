@@ -1,0 +1,121 @@
+public class ViaCEPController {
+
+
+    public static String consultaJSON(String cep) {
+
+        //Não esquecer de cadastrar o viacep como site remoto
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('https://viacep.com.br/ws/' + cep + '/json/');
+        req.setMethod('GET');
+        req.setHeader('Content-Type', 'application/json');
+        req.setTimeout(120000);
+        try {
+            Http h = new Http();
+            HttpResponse res = h.send(req);
+            system.debug(res.getBody());
+            if (res.getStatusCode() == 200) {
+                ViaCep dados = parse(res.getBody());
+                if (dados.erro == true) {
+                    return 'erro';
+                }
+
+                insereEndereco(
+                    dados.logradouro,
+                    dados.bairro,
+                    dados.cep,
+                    dados.localidade,
+                    dados.complemento,
+                    dados.uf
+                );
+
+                return 'sucesso';
+            }
+        } catch (Exception e) {
+            system.debug('erro' + e.getMessage());
+            return 'erro';
+
+        }
+
+        return null;
+    }
+
+    @Future(Callout = true)
+    public static void consultaXML(String cep) {
+
+
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('https://viacep.com.br/ws/' + cep + '/xml/');
+        req.setMethod('GET');
+        req.setHeader('Content-Type', 'application/xml');
+        req.setTimeout(120000);
+        try {
+            Http h = new Http();
+            HttpResponse res = h.send(req);
+            system.debug(res.getBody());
+            if (res.getStatusCode() == 200) {
+                String JsonConvertido = XMLParser.xmlToJson(res.getBody());
+                XMLCEPClass instanciaXML = new XMLCEPClass();
+                instanciaXML = instanciaXML.parse(JsonConvertido);
+                ViaCep dados = instanciaXML.xmlcep;
+
+
+                insereEndereco(
+                    dados.logradouro,
+                    dados.bairro,
+                    dados.cep,
+                    dados.localidade,
+                    dados.complemento,
+                    dados.uf
+                );
+
+            }
+        } catch (Exception e) {
+            system.debug('erro' + e.getMessage());
+
+        }
+
+    }
+
+    public static void insereEndereco(String logradouro, String bairro,
+        String cep, String localidade, String complemento, String uf) {
+
+        Endereco__c endereco = new Endereco__c();
+        endereco.Name = logradouro;
+        endereco.Bairro__c = bairro;
+        endereco.CEP__c = cep;
+        endereco.Cidade__c = localidade;
+        endereco.Complemento__c = complemento;
+        endereco.Estado__c = uf;
+
+        upsert endereco CEP__c; //upsert by External Id
+
+
+    }
+
+    public class XMLCEPClass {
+
+        public ViaCep xmlcep;
+
+        public XMLCEPClass parse(String json) {
+            return (XMLCEPClass) System.JSON.deserialize(json, XMLCEPClass.class);
+        }
+    }
+
+    public class ViaCep {
+        public String cep;
+        public String logradouro;
+        public String complemento;
+        public String bairro;
+        public String localidade;
+        public String uf;
+        public String unidade;
+        public String ibge;
+        public String gia;
+        public Boolean erro;
+    }
+
+
+    public static ViaCep parse(String json) {
+        return (ViaCep) System.JSON.deserialize(json, ViaCep.class);
+    }
+}
